@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create LinkedIn Campaign"
+  short_description: "Build grounded, branded LinkedIn campaign kits"
+  default_prompt: "Use $create-linkedin-campaign to create a LinkedIn campaign for today’s company event."
