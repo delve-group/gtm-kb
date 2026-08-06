@@ -8,7 +8,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
-RUN npm ci
+# Coolify commonly sets NODE_ENV=production for the build. npm would then omit
+# devDependencies, but TypeScript is required to compile the application.
+RUN npm ci --include=dev
 
 FROM dependencies AS build
 COPY tsconfig.json tsconfig.build.json ./
