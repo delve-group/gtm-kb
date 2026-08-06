@@ -1,0 +1,28 @@
+export { BrainKernel } from './kernel.js';
+export { BrainKernelError, type BrainKernelErrorCode } from './errors.js';
+export type {
+  BrainChange,
+  BrainCitation,
+  BrainConcept,
+  BrainContextConcept,
+  BrainContextFact,
+  BrainContextPack,
+  BrainContextPackInput,
+  BrainContextSelection,
+  BrainDocumentKind,
+  BrainDomainSummary,
+  BrainDomainsReport,
+  BrainGetInput,
+  BrainGetResult,
+  BrainHeading,
+  BrainHealthSnapshot,
+  BrainKernelOptions,
+  BrainRelation,
+  BrainSearchInput,
+  BrainSearchResult,
+  BrainSource,
+  BrainValidationInput,
+  BrainValidationReport,
+  ValidationIssue,
+  ValidationSeverity,
+} from './types.js';

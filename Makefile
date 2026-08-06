@@ -1,4 +1,4 @@
-.PHONY: validate validate-strict test
+.PHONY: validate validate-strict test test-ts check
 
 validate:
 	ruby scripts/validate_brain.rb brain
@@ -8,3 +8,9 @@ validate-strict:
 
 test:
 	ruby tests/validate_brain_test.rb
+
+test-ts:
+	npm test
+
+check:
+	npm run check

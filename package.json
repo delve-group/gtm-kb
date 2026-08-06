@@ -1,0 +1,58 @@
+{
+  "name": "superseller-company-brain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Git-backed Company Brain exposed over MCP Streamable HTTP",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "dev": "node --watch --import tsx src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ruby": "ruby tests/validate_brain_test.rb",
+    "validate:brain": "node --import tsx src/cli/validate-brain.ts",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:ruby && npm run validate:brain && npm run build"
+  },
+  "dependencies": {
+    "@langfuse/otel": "^5.10.0",
+    "@langfuse/tracing": "^5.10.0",
+    "@modelcontextprotocol/express": "^2.0.0",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@octokit/auth-app": "^8.3.0",
+    "@octokit/rest": "^22.0.1",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/sdk-node": "^0.221.0",
+    "better-sqlite3": "^13.0.3",
+    "cookie": "^2.0.1",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.2",
+    "@types/supertest": "^7.2.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.8.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "supertest": "^7.2.2",
+    "tsx": "^4.23.9",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.66.0",
+    "vitest": "^4.1.10"
+  }
+}
