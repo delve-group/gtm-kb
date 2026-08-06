@@ -2,6 +2,8 @@
 
 ## 2026-08-06
 
+* **People**: Added the four confirmed Superseller co-founders, their working roles, expertise, and LinkedIn identities while leaving tagging and photo consent unknown.
+* **Company**: Documented Superseller's origin within Delve Engine, the founder-versus-founding-member distinction, and the current internal ownership and operating structure.
 * **Creation**: Established the active OKF v0.2 company-wide brain alongside the legacy product and engineering reference bundle.
 * **Creation**: Added company, people, product, strategy, go-to-market, events, research, operations, engineering, governance, and assets areas.
 * **Creation**: Seeded the brain with source-backed Superseller positioning, capabilities, safe-claim rules, brand language, and visual tokens.
