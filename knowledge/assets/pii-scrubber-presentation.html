@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PII Scrubber — How It Works</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* ===========================================
+           CSS CUSTOM PROPERTIES — TERMINAL GREEN THEME
+           =========================================== */
+        :root {
+            /* Colors */
+            --bg-primary: #0a0e0a;
+            --bg-secondary: #0f1a0f;
+            --bg-card: rgba(0, 255, 65, 0.04);
+            --bg-card-hover: rgba(0, 255, 65, 0.08);
+            --text-primary: #c8e6c8;
+            --text-secondary: #6b9d6b;
+            --text-muted: #3d6b3d;
+            --accent: #00ff41;
+            --accent-dim: #00cc33;
+            --accent-glow: rgba(0, 255, 65, 0.15);
+            --accent-glow-strong: rgba(0, 255, 65, 0.3);
+            --red: #ff4444;
+            --red-dim: rgba(255, 68, 68, 0.15);
+            --yellow: #ffcc00;
+            --yellow-dim: rgba(255, 204, 0, 0.12);
+            --green-bright: #00ff88;
+            --green-dim: rgba(0, 255, 136, 0.12);
+            --blue: #44aaff;
+
+            /* Typography */
+            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+            --font-body: 'Inter', system-ui, sans-serif;
+            --title-size: clamp(1.8rem, 5vw, 3.8rem);
+            --h2-size: clamp(1.3rem, 3.5vw, 2.4rem);
+            --h3-size: clamp(1rem, 2.5vw, 1.5rem);
+            --body-size: clamp(0.7rem, 1.3vw, 1rem);
+            --small-size: clamp(0.6rem, 1vw, 0.85rem);
+            --code-size: clamp(0.6rem, 1.1vw, 0.88rem);
+
+            /* Spacing */
+            --slide-padding: clamp(1.5rem, 4vw, 4rem);
+            --content-gap: clamp(0.8rem, 2vw, 1.8rem);
+            --element-gap: clamp(0.3rem, 1vw, 0.8rem);
+
+            /* Animation */
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --duration: 0.6s;
+        }
+
+        /* ===========================================
+           BASE STYLES
+           =========================================== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html {
+            scroll-behavior: smooth;
+            scroll-snap-type: y mandatory;
+            height: 100%;
+            overflow-x: hidden;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100%;
+            overflow-x: hidden;
+            line-height: 1.5;
+        }
+
+        /* ===========================================
+           GRID BACKGROUND PATTERN
+           =========================================== */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                linear-gradient(rgba(0,255,65,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,255,65,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ===========================================
+           SLIDE CONTAINER
+           =========================================== */
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            padding: var(--slide-padding);
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .slide-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            max-height: 100%;
+            overflow: hidden;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* ===========================================
+           TYPOGRAPHY
+           =========================================== */
+        h1 {
+            font-family: var(--font-mono);
+            font-size: var(--title-size);
+            font-weight: 700;
+            color: var(--accent);
+            text-shadow: 0 0 40px var(--accent-glow-strong);
+            line-height: 1.1;
+        }
+
+        h2 {
+            font-family: var(--font-mono);
+            font-size: var(--h2-size);
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: var(--content-gap);
+            line-height: 1.2;
+        }
+
+        h2 .dim { color: var(--text-muted); font-weight: 400; }
+
+        h3 {
+            font-family: var(--font-mono);
+            font-size: var(--h3-size);
+            font-weight: 600;
+            color: var(--accent-dim);
+            margin-bottom: var(--element-gap);
+        }
+
+        p, li {
+            font-size: var(--body-size);
+            color: var(--text-primary);
+            line-height: 1.55;
+        }
+
+        .subtitle {
+            font-size: clamp(0.85rem, 1.5vw, 1.15rem);
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+        }
+
+        .tagline {
+            font-size: var(--small-size);
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        code, .code {
+            font-family: var(--font-mono);
+            font-size: var(--code-size);
+            background: rgba(0,255,65,0.08);
+            color: var(--accent);
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+        }
+
+        /* ===========================================
+           SLIDE NUMBER BADGE
+           =========================================== */
+        .slide-num {
+            position: absolute;
+            top: clamp(0.8rem, 2vw, 1.5rem);
+            right: clamp(0.8rem, 2vw, 1.5rem);
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            color: var(--text-muted);
+            opacity: 0.6;
+        }
+
+        /* ===========================================
+           CARDS & CONTAINERS
+           =========================================== */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid rgba(0,255,65,0.1);
+            border-radius: 8px;
+            padding: clamp(0.6rem, 1.5vw, 1.2rem);
+        }
+
+        .card:hover { background: var(--bg-card-hover); }
+
+        .metric-card {
+            display: flex;
+            align-items: flex-start;
+            gap: clamp(0.5rem, 1vw, 1rem);
+            padding: clamp(0.5rem, 1.2vw, 1rem);
+            border-radius: 8px;
+            border-left: 3px solid transparent;
+        }
+
+        .metric-card.tp { border-left-color: var(--green-bright); background: var(--green-dim); }
+        .metric-card.fn { border-left-color: var(--red); background: var(--red-dim); }
+        .metric-card.fp { border-left-color: var(--yellow); background: var(--yellow-dim); }
+
+        .metric-icon {
+            font-size: clamp(1.2rem, 2vw, 1.8rem);
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .metric-label {
+            font-family: var(--font-mono);
+            font-weight: 700;
+            font-size: var(--body-size);
+        }
+
+        .metric-desc {
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+        }
+
+        /* ===========================================
+           PIPELINE DIAGRAM
+           =========================================== */
+        .pipeline {
+            display: flex;
+            align-items: center;
+            gap: clamp(0.3rem, 0.8vw, 0.6rem);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .pipe-box {
+            background: var(--bg-card);
+            border: 1px solid rgba(0,255,65,0.2);
+            border-radius: 8px;
+            padding: clamp(0.5rem, 1.2vw, 1rem) clamp(0.6rem, 1.5vw, 1.2rem);
+            text-align: center;
+            flex: 1;
+            min-width: 120px;
+            max-width: 280px;
+        }
+
+        .pipe-box .pipe-title {
+            font-family: var(--font-mono);
+            font-weight: 700;
+            font-size: var(--body-size);
+            color: var(--accent);
+            margin-bottom: 0.2em;
+        }
+
+        .pipe-box .pipe-desc {
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+        }
+
+        .pipe-box .pipe-time {
+            font-family: var(--font-mono);
+            font-size: clamp(0.55rem, 0.9vw, 0.75rem);
+            color: var(--text-muted);
+            margin-top: 0.3em;
+        }
+
+        .pipe-arrow {
+            font-family: var(--font-mono);
+            font-size: clamp(1rem, 2vw, 1.5rem);
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        /* ===========================================
+           TABLE
+           =========================================== */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: var(--small-size);
+        }
+
+        .data-table th {
+            font-family: var(--font-mono);
+            color: var(--accent);
+            text-align: left;
+            padding: clamp(0.25rem, 0.6vw, 0.5rem) clamp(0.4rem, 0.8vw, 0.8rem);
+            border-bottom: 1px solid rgba(0,255,65,0.2);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .data-table td {
+            padding: clamp(0.2rem, 0.5vw, 0.4rem) clamp(0.4rem, 0.8vw, 0.8rem);
+            border-bottom: 1px solid rgba(0,255,65,0.05);
+            color: var(--text-primary);
+            vertical-align: top;
+        }
+
+        .data-table td code {
+            font-size: clamp(0.55rem, 0.95vw, 0.8rem);
+            white-space: nowrap;
+        }
+
+        .data-table tr:hover { background: rgba(0,255,65,0.03); }
+
+        /* ===========================================
+           EXAMPLE BLOCKS
+           =========================================== */
+        .example-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+            gap: clamp(0.4rem, 1vw, 0.8rem);
+        }
+
+        .example-block {
+            background: var(--bg-card);
+            border: 1px solid rgba(0,255,65,0.1);
+            border-radius: 8px;
+            padding: clamp(0.5rem, 1vw, 0.8rem);
+            border-top: 2px solid transparent;
+        }
+
+        .example-block.tp-ex { border-top-color: var(--green-bright); }
+        .example-block.fn-ex { border-top-color: var(--red); }
+        .example-block.fp-ex { border-top-color: var(--yellow); }
+
+        .example-block .ex-label {
+            font-family: var(--font-mono);
+            font-weight: 700;
+            font-size: var(--small-size);
+            margin-bottom: 0.3em;
+        }
+
+        .example-block .ex-label.tp-l { color: var(--green-bright); }
+        .example-block .ex-label.fn-l { color: var(--red); }
+        .example-block .ex-label.fp-l { color: var(--yellow); }
+
+        .ex-line {
+            font-family: var(--font-mono);
+            font-size: clamp(0.55rem, 0.95vw, 0.78rem);
+            color: var(--text-secondary);
+            line-height: 1.5;
+            word-break: break-all;
+        }
+
+        .ex-line strong { color: var(--text-primary); font-weight: 500; }
+        .ex-line .token { color: var(--accent); }
+        .ex-line .leaked { color: var(--red); text-decoration: underline; }
+        .ex-line .scrubbed-wrongly { color: var(--yellow); }
+
+        /* ===========================================
+           BULLET LISTS
+           =========================================== */
+        .bullet-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: var(--element-gap);
+        }
+
+        .bullet-list li {
+            font-size: var(--body-size);
+            padding-left: 1.5em;
+            position: relative;
+        }
+
+        .bullet-list li::before {
+            content: '›';
+            position: absolute;
+            left: 0;
+            color: var(--accent);
+            font-family: var(--font-mono);
+            font-weight: 700;
+        }
+
+        /* ===========================================
+           GRID LAYOUTS
+           =========================================== */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--content-gap);
+        }
+
+        .three-metrics {
+            display: flex;
+            flex-direction: column;
+            gap: var(--element-gap);
+        }
+
+        .layer-chain {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.3rem, 0.8vw, 0.6rem);
+        }
+
+        .layer-item {
+            display: flex;
+            align-items: center;
+            gap: clamp(0.4rem, 1vw, 0.8rem);
+            background: var(--bg-card);
+            border: 1px solid rgba(0,255,65,0.1);
+            border-radius: 6px;
+            padding: clamp(0.4rem, 0.8vw, 0.6rem) clamp(0.6rem, 1.2vw, 1rem);
+        }
+
+        .layer-num {
+            font-family: var(--font-mono);
+            font-weight: 700;
+            font-size: clamp(1rem, 2vw, 1.5rem);
+            color: var(--accent);
+            flex-shrink: 0;
+            width: 2em;
+            text-align: center;
+        }
+
+        .layer-info { flex: 1; }
+
+        .layer-info .layer-title {
+            font-family: var(--font-mono);
+            font-weight: 600;
+            font-size: var(--body-size);
+            color: var(--text-primary);
+        }
+
+        .layer-info .layer-desc {
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+        }
+
+        /* ===========================================
+           FORMULA BLOCKS
+           =========================================== */
+        .formula-block {
+            background: rgba(0,255,65,0.05);
+            border: 1px solid rgba(0,255,65,0.15);
+            border-radius: 8px;
+            padding: clamp(0.5rem, 1vw, 0.8rem) clamp(0.8rem, 1.5vw, 1.2rem);
+        }
+
+        .formula {
+            font-family: var(--font-mono);
+            font-size: clamp(0.8rem, 1.5vw, 1.1rem);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .formula-note {
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+            margin-top: 0.2em;
+        }
+
+        /* ===========================================
+           FLOW DIAGRAM (Simple)
+           =========================================== */
+        .flow-simple {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: clamp(0.3rem, 0.6vw, 0.5rem);
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+            flex-wrap: wrap;
+        }
+
+        .flow-simple .flow-node {
+            background: var(--bg-card);
+            border: 1px solid rgba(0,255,65,0.15);
+            border-radius: 6px;
+            padding: 0.3em 0.7em;
+            color: var(--text-primary);
+        }
+
+        .flow-simple .flow-node.highlight {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .flow-simple .flow-arr { color: var(--text-muted); }
+
+        /* ===========================================
+           TWO-AGENT DIAGRAM
+           =========================================== */
+        .agent-pair {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: clamp(0.4rem, 1vw, 0.8rem);
+            align-items: center;
+        }
+
+        .agent-box {
+            background: var(--bg-card);
+            border: 1px solid rgba(0,255,65,0.15);
+            border-radius: 8px;
+            padding: clamp(0.5rem, 1.2vw, 1rem);
+            text-align: center;
+        }
+
+        .agent-box .agent-name {
+            font-family: var(--font-mono);
+            font-weight: 700;
+            font-size: var(--body-size);
+            color: var(--accent);
+        }
+
+        .agent-box .agent-model {
+            font-family: var(--font-mono);
+            font-size: clamp(0.55rem, 0.9vw, 0.75rem);
+            color: var(--text-muted);
+        }
+
+        .agent-box .agent-role {
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+            margin-top: 0.3em;
+        }
+
+        .agent-arrows {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3em;
+            font-family: var(--font-mono);
+            color: var(--text-muted);
+            font-size: var(--small-size);
+        }
+
+        /* Takeaway grid */
+        .takeaway-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+            gap: clamp(0.4rem, 1vw, 0.8rem);
+        }
+
+        .takeaway-item {
+            background: var(--bg-card);
+            border: 1px solid rgba(0,255,65,0.1);
+            border-radius: 8px;
+            padding: clamp(0.5rem, 1vw, 0.8rem);
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5em;
+        }
+
+        .takeaway-icon {
+            font-size: clamp(1rem, 1.5vw, 1.3rem);
+            flex-shrink: 0;
+        }
+
+        .takeaway-text {
+            font-size: var(--small-size);
+            color: var(--text-primary);
+            line-height: 1.4;
+        }
+
+        /* ===========================================
+           ANIMATIONS
+           =========================================== */
+        .reveal {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity var(--duration) var(--ease-out-expo),
+                        transform var(--duration) var(--ease-out-expo);
+        }
+
+        .slide.visible .reveal { opacity: 1; transform: translateY(0); }
+        .reveal:nth-child(1) { transition-delay: 0.05s; }
+        .reveal:nth-child(2) { transition-delay: 0.12s; }
+        .reveal:nth-child(3) { transition-delay: 0.19s; }
+        .reveal:nth-child(4) { transition-delay: 0.26s; }
+        .reveal:nth-child(5) { transition-delay: 0.33s; }
+        .reveal:nth-child(6) { transition-delay: 0.40s; }
+
+        /* ===========================================
+           PROGRESS BAR
+           =========================================== */
+        .progress-bar {
+            position: fixed;
+            top: 0; left: 0;
+            height: 3px;
+            background: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow-strong);
+            z-index: 100;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        /* ===========================================
+           NAV DOTS
+           =========================================== */
+        .nav-dots {
+            position: fixed;
+            right: clamp(0.5rem, 1.5vw, 1.2rem);
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 100;
+        }
+
+        .nav-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            padding: 0;
+        }
+
+        .nav-dot.active {
+            background: var(--accent);
+            box-shadow: 0 0 8px var(--accent-glow-strong);
+            transform: scale(1.3);
+        }
+
+        .nav-dot:hover { background: var(--accent-dim); }
+
+        /* ===========================================
+           KEYBOARD HINT
+           =========================================== */
+        .keyboard-hint {
+            position: fixed;
+            bottom: clamp(0.5rem, 1.5vw, 1rem);
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: var(--font-mono);
+            font-size: clamp(0.55rem, 0.8vw, 0.7rem);
+            color: var(--text-muted);
+            opacity: 0.5;
+            z-index: 100;
+        }
+
+        /* ===========================================
+           SCANLINE EFFECT (subtle)
+           =========================================== */
+        .slide::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.03) 2px,
+                rgba(0,0,0,0.03) 4px
+            );
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        /* ===========================================
+           RESPONSIVE BREAKPOINTS
+           =========================================== */
+        @media (max-height: 700px) {
+            :root {
+                --slide-padding: clamp(0.8rem, 3vw, 2rem);
+                --content-gap: clamp(0.5rem, 1.5vw, 1rem);
+                --title-size: clamp(1.4rem, 4.5vw, 2.5rem);
+                --h2-size: clamp(1.1rem, 3vw, 1.8rem);
+            }
+        }
+
+        @media (max-height: 600px) {
+            :root {
+                --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem);
+                --content-gap: clamp(0.3rem, 1vw, 0.75rem);
+                --title-size: clamp(1.1rem, 4vw, 2rem);
+                --body-size: clamp(0.65rem, 1.1vw, 0.9rem);
+            }
+            .nav-dots, .keyboard-hint { display: none; }
+        }
+
+        @media (max-height: 500px) {
+            :root {
+                --slide-padding: clamp(0.4rem, 2vw, 1rem);
+                --title-size: clamp(1rem, 3.5vw, 1.5rem);
+                --h2-size: clamp(0.9rem, 2.5vw, 1.25rem);
+                --body-size: clamp(0.6rem, 1vw, 0.8rem);
+            }
+        }
+
+        @media (max-width: 600px) {
+            :root { --title-size: clamp(1.3rem, 7vw, 2.5rem); }
+            .two-col { grid-template-columns: 1fr; }
+            .agent-pair { grid-template-columns: 1fr; }
+            .agent-arrows { flex-direction: row; }
+        }
+
+        /* ===========================================
+           REDUCED MOTION
+           =========================================== */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.2s !important;
+            }
+            html { scroll-behavior: auto; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Progress bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- Navigation dots -->
+    <nav class="nav-dots" id="navDots"></nav>
+
+    <!-- Keyboard hint -->
+    <div class="keyboard-hint">↑↓ or Space to navigate</div>
+
+    <!-- ==========================================
+         SLIDE 1 — TITLE
+         ========================================== -->
+    <section class="slide" id="slide-1">
+        <span class="slide-num">01 / 12</span>
+        <div class="slide-content" style="text-align:center; align-items:center;">
+            <p class="reveal tagline" style="margin-bottom:var(--content-gap);">Superseller | Data Safety Module</p>
+            <h1 class="reveal">PII Scrubber</h1>
+            <p class="reveal subtitle" style="margin-top:var(--element-gap);">How It Works</p>
+            <div class="reveal" style="margin-top:var(--content-gap);">
+                <div class="flow-simple">
+                    <span class="flow-node">Regex</span>
+                    <span class="flow-arr">+</span>
+                    <span class="flow-node">NLP</span>
+                    <span class="flow-arr">+</span>
+                    <span class="flow-node highlight">Bielik LLM</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 2 — WHY PII SCRUBBING?
+         ========================================== -->
+    <section class="slide" id="slide-2">
+        <span class="slide-num">02 / 12</span>
+        <div class="slide-content">
+            <h2 class="reveal">Why PII Scrubbing? <span class="dim">// motivation</span></h2>
+            <ul class="bullet-list reveal">
+                <li><strong>GDPR & AI Act</strong> — personal data must never reach external LLM providers</li>
+                <li><strong>Scrub before inference</strong> — clean the message before it leaves our infrastructure</li>
+                <li><strong>Graceful degradation</strong> — if Ollama is down, pipeline falls back to Regex + NLP only</li>
+            </ul>
+            <div class="reveal" style="margin-top:var(--content-gap);">
+                <div class="flow-simple">
+                    <span class="flow-node">User Message</span>
+                    <span class="flow-arr">→</span>
+                    <span class="flow-node highlight">3-Pass Scrubber</span>
+                    <span class="flow-arr">→</span>
+                    <span class="flow-node">Clean Message</span>
+                    <span class="flow-arr">→</span>
+                    <span class="flow-node">External LLM</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 3 — 3-PASS ARCHITECTURE
+         ========================================== -->
+    <section class="slide" id="slide-3">
+        <span class="slide-num">03 / 12</span>
+        <div class="slide-content">
+            <h2 class="reveal">3-Pass Architecture <span class="dim">// pipeline</span></h2>
+            <div class="pipeline reveal">
+                <div class="pipe-box">
+                    <div class="pipe-title">Pass 1: Regex</div>
+                    <div class="pipe-desc">10 patterns + checksum validators + context heuristics</div>
+                    <div class="pipe-time">~1 ms</div>
+                </div>
+                <span class="pipe-arrow">→</span>
+                <div class="pipe-box">
+                    <div class="pipe-title">Pass 2: spaCy NLP</div>
+                    <div class="pipe-desc">Polish NER for names, locations, declined forms</div>
+                    <div class="pipe-time">~10 ms</div>
+                </div>
+                <span class="pipe-arrow">→</span>
+                <div class="pipe-box" style="border-color:rgba(0,255,65,0.3);">
+                    <div class="pipe-title">Pass 3: Bielik LLM</div>
+                    <div class="pipe-desc">GDPR audit via local Ollama — catches what Regex+NLP missed</div>
+                    <div class="pipe-time">~2-5 s (local)</div>
+                </div>
+            </div>
+            <p class="reveal" style="margin-top:var(--content-gap); font-size:var(--small-size); color:var(--text-secondary); text-align:center;">
+                Each pass adds a layer of defense · Performance timings logged per pass
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 4 — REGEX RULES + VALIDATORS
+         ========================================== -->
+    <section class="slide" id="slide-4">
+        <span class="slide-num">04 / 12</span>
+        <div class="slide-content">
+            <h2 class="reveal">Pass 1: Regex Rules <span class="dim">// 10 patterns</span></h2>
+            <div class="reveal" style="overflow:hidden;">
+                <table class="data-table">
+                    <thead>
+                        <tr><th>Token</th><th>What it catches</th><th>Example</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>&lt;PESEL&gt;</code></td><td>National ID (11 digits + checksum)</td><td><code>44051401359</code></td></tr>
+                        <tr><td><code>&lt;IBAN&gt;</code> / <code>&lt;NRB&gt;</code></td><td>Bank accounts (IBAN mod-97)</td><td><code>PL61 1090 1014...</code></td></tr>
+                        <tr><td><code>&lt;TELEFON&gt;</code></td><td>Polish phone numbers</td><td><code>+48 123 456 789</code></td></tr>
+                        <tr><td><code>&lt;EMAIL&gt;</code></td><td>Email addresses</td><td><code>jan@example.com</code></td></tr>
+                        <tr><td><code>&lt;NUMER_ZAMOWIENIA&gt;</code></td><td>UUID order IDs</td><td><code>a1b2c3d4-e5f6-...</code></td></tr>
+                        <tr><td><code>&lt;NUMER_PRZESYLKI&gt;</code></td><td>Shipment / tracking numbers</td><td><code>RR123456789PL</code></td></tr>
+                        <tr><td><code>&lt;URL&gt;</code></td><td>Web links (.pl, .com, .eu…)</td><td><code>allegro.pl/...</code></td></tr>
+                        <tr><td><code>&lt;KOD_POCZTOWY&gt;</code></td><td>Postal codes</td><td><code>00-950</code></td></tr>
+                        <tr><td><code>&lt;SOCIAL&gt;</code></td><td>Social handles</td><td><code>@jan_kow</code></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="reveal" style="margin-top:var(--element-gap); font-size:var(--small-size); color:var(--text-secondary);">
+                + Context protection: monetary terms (<code>zł</code>, <code>price</code>) suppress false PESEL/IBAN matches
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 5 — NLP + BIELIK
+         ========================================== -->
+    <section class="slide" id="slide-5">
+        <span class="slide-num">05 / 12</span>
+        <div class="slide-content">
+            <h2 class="reveal">Pass 2 & 3 <span class="dim">// NLP + Bielik LLM</span></h2>
+            <div class="two-col reveal">
+                <div class="card">
+                    <h3>Pass 2: spaCy NER</h3>
+                    <ul class="bullet-list">
+                        <li>Polish model <code>pl_core_news_sm</code></li>
+                        <li>Person names → <code>&lt;IMIE_NAZWISKO&gt;</code></li>
+                        <li>Locations → <code>&lt;ADRES&gt;</code></li>
+                        <li>Handles declined forms (Markiem, Marka…)</li>
+                        <li>Skips already-tokenized text</li>
+                    </ul>
+                </div>
+                <div class="card" style="border-color:rgba(0,255,65,0.25);">
+                    <h3>Pass 3: Bielik LLM 🆕</h3>
+                    <ul class="bullet-list">
+                        <li>Local <code>bielik-4.5b-instruct</code> via Ollama</li>
+                        <li>Receives original + scrubbed text</li>
+                        <li>Returns structured JSON verdict</li>
+                        <li>Catches indirect identifiers (tracking IDs, login handles…)</li>
+                        <li>Temperature 0.0 for determinism</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 6 — 3-LAYER PATCHING CHAIN
+         ========================================== -->
+    <section class="slide" id="slide-6">
+        <span class="slide-num">06 / 12</span>
+        <div class="slide-content">
+            <h2 class="reveal">3-Layer Patching Chain <span class="dim">// when Bielik says FAIL</span></h2>
+            <div class="layer-chain reveal">
+                <div class="layer-item">
+                    <span class="layer-num">L1</span>
+                    <div class="layer-info">
+                        <div class="layer-title">Substring Match</div>
+                        <div class="layer-desc">Deterministic replacement — find leaked text → replace with token. Most reliable.</div>
+                    </div>
+                </div>
+                <div class="layer-item">
+                    <span class="layer-num">L2</span>
+                    <div class="layer-info">
+                        <div class="layer-title">Index-Based Fallback</div>
+                        <div class="layer-desc">Use start/end indices from Bielik + SequenceMatcher similarity ≥ 0.5 validation.</div>
+                    </div>
+                </div>
+                <div class="layer-item">
+                    <span class="layer-num">L3</span>
+                    <div class="layer-info">
+                        <div class="layer-title">Nuclear Re-scrub</div>
+                        <div class="layer-desc">Bielik rewrites the entire text with proper tokens. Last resort fallback.</div>
+                    </div>
+                </div>
+            </div>
+            <p class="reveal" style="margin-top:var(--content-gap); font-size:var(--small-size); color:var(--text-secondary); text-align:center;">
+                After patching → <strong>Re-audit</strong> (max 1 retry to prevent infinite loops)
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 7 — TP / FN / FP DEFINITIONS
+         ========================================== -->
+    <section class="slide" id="slide-7">
+        <span class="slide-num">07 / 12</span>
+        <div class="slide-content">
+            <h2 class="reveal">Metrics <span class="dim">// TP, FN, FP</span></h2>
+            <div class="three-metrics reveal">
+                <div class="metric-card tp">
+                    <span class="metric-icon">🟢</span>
+                    <div>
+                        <div class="metric-label">True Positive (TP)</div>
+                        <div class="metric-desc">Scrubber correctly found and masked real PII. The sensitive data is gone from the output.</div>
+                    </div>
+                </div>
+                <div class="metric-card fn">
+                    <span class="metric-icon">🔴</span>
+                    <div>
+                        <div class="metric-label">False Negative (FN)</div>
+                        <div class="metric-desc">PII leaked through! Data breach risk — the sensitive value remains in the output unchanged.</div>
+                    </div>
+                </div>
+                <div class="metric-card fp">
+                    <span class="metric-icon">🟡</span>
+                    <div>
+                        <div class="metric-label">False Positive (FP)</div>
+                        <div class="metric-desc">Scrubber was too aggressive — masked harmless text (e.g. a price mistaken for PESEL).</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 8 — TP / FN / FP EXAMPLES
+         ========================================== -->
+    <section class="slide" id="slide-8">
+        <span class="slide-num">08 / 12</span>
+        <div class="slide-content">
+            <h2 class="reveal">Examples <span class="dim">// in practice</span></h2>
+            <div class="example-row reveal">
+                <div class="example-block tp-ex">
+                    <div class="ex-label tp-l">✅ TP — Correct Scrub</div>
+                    <div class="ex-line"><strong>In:</strong> "Email: jan.k@example.com"</div>
+                    <div class="ex-line"><strong>Out:</strong> "Email: <span class="token">&lt;EMAIL&gt;</span>"</div>
+                    <div class="ex-line" style="color:var(--green-bright); margin-top:0.3em;">→ TP +1 for EMAIL</div>
+                </div>
+                <div class="example-block fn-ex">
+                    <div class="ex-label fn-l">❌ FN — Data Leak!</div>
+                    <div class="ex-line"><strong>In:</strong> "Pesel: <span class="leaked">99010112342</span>"</div>
+                    <div class="ex-line"><strong>Out:</strong> "Pesel: <span class="leaked">99010112342</span>"</div>
+                    <div class="ex-line" style="color:var(--red); margin-top:0.3em;">→ FN +1 · Hard Exit (code 1)</div>
+                </div>
+                <div class="example-block fp-ex">
+                    <div class="ex-label fp-l">⚠️ FP — Over-Scrubbing</div>
+                    <div class="ex-line"><strong>In:</strong> "Price: 55030101230 zł"</div>
+                    <div class="ex-line"><strong>Out:</strong> "Price: <span class="scrubbed-wrongly">&lt;PESEL&gt;</span> zł"</div>
+                    <div class="ex-line" style="color:var(--yellow); margin-top:0.3em;">→ FP +1 · Price wiped as PESEL</div>
+                </div>
+            </div>
+            <p class="reveal" style="margin-top:var(--element-gap); font-size:var(--small-size); color:var(--text-secondary); text-align:center;">
+                <strong>Flexible masking:</strong> wrong token type but text removed? Still <strong>TP</strong> for safety. Tracked via <code>--show-mismatch</code>.
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 9 — RECALL & PRECISION
+         ========================================== -->
+    <section class="slide" id="slide-9">
+        <span class="slide-num">09 / 12</span>
+        <div class="slide-content">
+            <h2 class="reveal">Recall & Precision <span class="dim">// formulas</span></h2>
+            <div class="two-col reveal">
+                <div class="formula-block">
+                    <div class="formula">Recall = TP / (TP + FN)</div>
+                    <div class="formula-note">"How much PII did we catch?"</div>
+                    <ul class="bullet-list" style="margin-top:0.6em;">
+                        <li>Critical PII (EMAIL, PHONE, PESEL, IBAN) requires <strong>1.00</strong></li>
+                        <li>Others require <strong>≥ 0.95</strong></li>
+                    </ul>
+                </div>
+                <div class="formula-block">
+                    <div class="formula">Precision = TP / (TP + FP)</div>
+                    <div class="formula-note">"How accurate are our redactions?"</div>
+                    <ul class="bullet-list" style="margin-top:0.6em;">
+                        <li>Tracked as a proxy metric</li>
+                        <li>Does <strong>not</strong> block CI</li>
+                    </ul>
+                </div>
+            </div>
+            <p class="reveal" style="margin-top:var(--content-gap); font-size:var(--small-size); color:var(--text-secondary); text-align:center;">
+                <strong>Hard Leakage Detectors</strong> — secondary regex scan on output → triggers instant fail (exit 1)
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 10 — SYNTHETIC DATA GENERATION
+         ========================================== -->
+    <section class="slide" id="slide-10">
+        <span class="slide-num">10 / 12</span>
+        <div class="slide-content">
+            <h2 class="reveal">Synthetic Data Generation <span class="dim">// two agents</span></h2>
+            <div class="agent-pair reveal">
+                <div class="agent-box">
+                    <div class="agent-name">Generator</div>
+                    <div class="agent-model">GPT-4o</div>
+                    <div class="agent-role">Creates tricky test cases with edge cases, monetary contexts, multi-PII sentences</div>
+                </div>
+                <div class="agent-arrows">
+                    <span>batch →</span>
+                    <span>← rejected</span>
+                </div>
+                <div class="agent-box">
+                    <div class="agent-name">Judge</div>
+                    <div class="agent-model">GPT-5-mini</div>
+                    <div class="agent-role">Validates logical consistency — rejects hallucinated or mislabeled cases</div>
+                </div>
+            </div>
+            <ul class="bullet-list reveal" style="margin-top:var(--content-gap);">
+                <li>Shared PII truth-table rules ensure consistent definitions between both agents</li>
+                <li>Rejected cases → regenerated until batch reaches 100% structural correctness</li>
+                <li>Produces <code>synthetic_cases.json</code> for automated evaluation</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 11 — EVAL PIPELINE + AICOMPLIANCE
+         ========================================== -->
+    <section class="slide" id="slide-11">
+        <span class="slide-num">11 / 12</span>
+        <div class="slide-content">
+            <h2 class="reveal">Eval Pipeline & Compliance <span class="dim">// CI + API</span></h2>
+            <div class="two-col reveal">
+                <div class="card">
+                    <h3>Evaluation Flow</h3>
+                    <div class="flow-simple" style="margin-bottom:0.5em; justify-content:flex-start;">
+                        <span class="flow-node">JSON Cases</span>
+                        <span class="flow-arr">→</span>
+                        <span class="flow-node">scrub_text()</span>
+                        <span class="flow-arr">→</span>
+                        <span class="flow-node">Metrics</span>
+                    </div>
+                    <ul class="bullet-list">
+                        <li>CLI: <code>uv run evaluate_scrubber.py</code></li>
+                        <li>Exit 0 = pass, Exit 1 = fail</li>
+                        <li>Flags: <code>--show-fn/fp/mismatch</code></li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>AICompliance Gateway</h3>
+                    <ul class="bullet-list">
+                        <li><strong>Detection-only</strong> — does NOT scrub, only detects PII</li>
+                        <li><code>STANDARD</code> mode: Regex+spaCy (~15ms)</li>
+                        <li><code>STRICT</code> mode: + Bielik (~5s)</li>
+                        <li>Returns <code>ComplianceVerdict(safe, findings)</code></li>
+                        <li>Pre-flight check before external AI</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 12 — KEY TAKEAWAYS
+         ========================================== -->
+    <section class="slide" id="slide-12">
+        <span class="slide-num">12 / 12</span>
+        <div class="slide-content" style="align-items:center;">
+            <h2 class="reveal" style="text-align:center;">Key Takeaways <span class="dim">// summary</span></h2>
+            <div class="takeaway-grid reveal">
+                <div class="takeaway-item">
+                    <span class="takeaway-icon">🛡️</span>
+                    <span class="takeaway-text"><strong>3-layer defense</strong> — Regex → NLP → LLM, each catches what the previous missed</span>
+                </div>
+                <div class="takeaway-item">
+                    <span class="takeaway-icon">🧠</span>
+                    <span class="takeaway-text"><strong>Context-aware</strong> — validators + monetary context prevent false positives</span>
+                </div>
+                <div class="takeaway-item">
+                    <span class="takeaway-icon">🔧</span>
+                    <span class="takeaway-text"><strong>Auto-patching</strong> — 3-layer chain fixes leaks automatically when Bielik detects them</span>
+                </div>
+                <div class="takeaway-item">
+                    <span class="takeaway-icon">🏠</span>
+                    <span class="takeaway-text"><strong>Local LLM</strong> — Bielik runs via Ollama, no data leaves infrastructure</span>
+                </div>
+                <div class="takeaway-item">
+                    <span class="takeaway-icon">✅</span>
+                    <span class="takeaway-text"><strong>Safety first</strong> — flexible masking: wrong token ≠ failure, only true leaks fail</span>
+                </div>
+                <div class="takeaway-item">
+                    <span class="takeaway-icon">🤖</span>
+                    <span class="takeaway-text"><strong>Automated evals</strong> — synthetic generation + judge ensure continuous quality</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- ===========================================
+         JAVASCRIPT — SLIDE CONTROLLER
+         =========================================== -->
+    <script>
+        /* ===========================================
+           SLIDE PRESENTATION CONTROLLER
+           Handles keyboard/touch/scroll navigation,
+           progress bar, nav dots, and reveal animations.
+           =========================================== */
+        class SlidePresentation {
+            constructor() {
+                this.slides = document.querySelectorAll('.slide');
+                this.totalSlides = this.slides.length;
+                this.progressBar = document.getElementById('progressBar');
+                this.navDotsContainer = document.getElementById('navDots');
+
+                this.createNavDots();
+                this.setupIntersectionObserver();
+                this.setupKeyboardNav();
+                this.setupTouchNav();
+                this.updateProgress(0);
+            }
+
+            /* -------------------------------------------
+               Navigation Dots
+               ------------------------------------------- */
+            createNavDots() {
+                this.slides.forEach((_, i) => {
+                    const dot = document.createElement('button');
+                    dot.className = 'nav-dot';
+                    dot.setAttribute('aria-label', `Go to slide ${i + 1}`);
+                    dot.addEventListener('click', () => {
+                        this.slides[i].scrollIntoView({ behavior: 'smooth' });
+                    });
+                    this.navDotsContainer.appendChild(dot);
+                });
+                this.navDots = this.navDotsContainer.querySelectorAll('.nav-dot');
+            }
+
+            /* -------------------------------------------
+               Intersection Observer — detects which slide
+               is visible and triggers .visible class
+               ------------------------------------------- */
+            setupIntersectionObserver() {
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add('visible');
+                            const index = Array.from(this.slides).indexOf(entry.target);
+                            this.updateProgress(index);
+                            this.updateNavDots(index);
+                        }
+                    });
+                }, { threshold: 0.5 });
+
+                this.slides.forEach(slide => observer.observe(slide));
+            }
+
+            /* -------------------------------------------
+               Keyboard Navigation
+               ------------------------------------------- */
+            setupKeyboardNav() {
+                document.addEventListener('keydown', (e) => {
+                    const currentIndex = this.getCurrentSlideIndex();
+
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
+                        e.preventDefault();
+                        if (currentIndex < this.totalSlides - 1) {
+                            this.slides[currentIndex + 1].scrollIntoView({ behavior: 'smooth' });
+                        }
+                    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        if (currentIndex > 0) {
+                            this.slides[currentIndex - 1].scrollIntoView({ behavior: 'smooth' });
+                        }
+                    }
+                });
+            }
+
+            /* -------------------------------------------
+               Touch / Swipe Navigation
+               ------------------------------------------- */
+            setupTouchNav() {
+                let touchStartY = 0;
+                document.addEventListener('touchstart', (e) => {
+                    touchStartY = e.touches[0].clientY;
+                }, { passive: true });
+
+                document.addEventListener('touchend', (e) => {
+                    const diff = touchStartY - e.changedTouches[0].clientY;
+                    const currentIndex = this.getCurrentSlideIndex();
+
+                    if (Math.abs(diff) > 50) {
+                        if (diff > 0 && currentIndex < this.totalSlides - 1) {
+                            this.slides[currentIndex + 1].scrollIntoView({ behavior: 'smooth' });
+                        } else if (diff < 0 && currentIndex > 0) {
+                            this.slides[currentIndex - 1].scrollIntoView({ behavior: 'smooth' });
+                        }
+                    }
+                }, { passive: true });
+            }
+
+            /* -------------------------------------------
+               Progress Bar
+               ------------------------------------------- */
+            updateProgress(index) {
+                const progress = ((index + 1) / this.totalSlides) * 100;
+                this.progressBar.style.width = `${progress}%`;
+            }
+
+            /* -------------------------------------------
+               Nav Dots Active State
+               ------------------------------------------- */
+            updateNavDots(index) {
+                this.navDots.forEach((dot, i) => {
+                    dot.classList.toggle('active', i === index);
+                });
+            }
+
+            /* -------------------------------------------
+               Get Current Slide Index
+               ------------------------------------------- */
+            getCurrentSlideIndex() {
+                const scrollTop = window.scrollY || document.documentElement.scrollTop;
+                const viewportHeight = window.innerHeight;
+                return Math.round(scrollTop / viewportHeight);
+            }
+        }
+
+        // Initialize presentation
+        document.addEventListener('DOMContentLoaded', () => {
+            new SlidePresentation();
+        });
+    </script>
+</body>
+</html>
